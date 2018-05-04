@@ -33,6 +33,10 @@ OR (for 2.6)
 In your user's library for user installed Blender addons:
 
     /Users/(myuser)/Library/Application Support/Blender/2.7X/scripts/addons
+    
+OR (for 2.79)
+    
+    /Applications/Blender/blender.app/Contents/Resources/2.79/scripts/addons
 
 ### Linux
 
@@ -43,7 +47,11 @@ By default, this should look like:
 For Ubuntu users who installed Blender 2.68 via apt-get, this is the location:
 
     /usr/lib/blender/scripts/addons
-    
+
+For Ubuntu users who installed Blender 2.7x via apt-get, this is the location:
+
+    /usr/share/blender/scripts/addons
+
 
 ## Usage
 

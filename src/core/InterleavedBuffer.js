@@ -1,12 +1,9 @@
-import { _Math } from '../math/Math';
 
 /**
  * @author benaadams / https://twitter.com/ben_a_adams
  */
 
 function InterleavedBuffer( array, stride ) {
-
-	this.uuid = _Math.generateUUID();
 
 	this.array = array;
 	this.stride = stride;
@@ -19,17 +16,21 @@ function InterleavedBuffer( array, stride ) {
 
 }
 
-InterleavedBuffer.prototype = {
+Object.defineProperty( InterleavedBuffer.prototype, 'needsUpdate', {
 
-	constructor: InterleavedBuffer,
-
-	isInterleavedBuffer: true,
-
-	set needsUpdate( value ) {
+	set: function ( value ) {
 
 		if ( value === true ) this.version ++;
 
-	},
+	}
+
+} );
+
+Object.assign( InterleavedBuffer.prototype, {
+
+	isInterleavedBuffer: true,
+
+	onUploadCallback: function () {},
 
 	setArray: function ( array ) {
 
@@ -41,6 +42,8 @@ InterleavedBuffer.prototype = {
 
 		this.count = array !== undefined ? array.length / this.stride : 0;
 		this.array = array;
+
+		return this;
 
 	},
 
@@ -92,9 +95,17 @@ InterleavedBuffer.prototype = {
 
 		return new this.constructor().copy( this );
 
+	},
+
+	onUpload: function ( callback ) {
+
+		this.onUploadCallback = callback;
+
+		return this;
+
 	}
 
-};
+} );
 
 
 export { InterleavedBuffer };

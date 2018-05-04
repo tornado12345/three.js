@@ -21,6 +21,12 @@
 
 THREE.MMDPhysics = function ( mesh, params ) {
 
+	if ( typeof Ammo === 'undefined' ) {
+
+		throw new Error( 'THREE.MMDPhysics: Import ammo.js https://github.com/kripken/ammo.js' );
+
+	}
+
 	if ( params === undefined ) params = {};
 
 	this.mesh = mesh;
@@ -35,7 +41,7 @@ THREE.MMDPhysics = function ( mesh, params ) {
 	this.unitStep = ( params.unitStep !== undefined ) ? params.unitStep : 1 / 65;
 	this.maxStepNum = ( params.maxStepNum !== undefined ) ? params.maxStepNum : 3;
 
-	this.world = null;
+	this.world = params.world !== undefined ? params.world : null;
 	this.bodies = [];
 	this.constraints = [];
 
@@ -57,9 +63,14 @@ THREE.MMDPhysics.prototype = {
 
 		}
 
-		var currentPosition = mesh.position.clone();
-		var currentRotation = mesh.rotation.clone();
-		var currentScale = mesh.scale.clone();
+		var helper = this.helper;
+		var currentPosition = helper.allocThreeVector3();
+		var currentRotation = helper.allocThreeEuler();
+		var currentScale = helper.allocThreeVector3();
+
+		currentPosition.copy( mesh.position );
+		currentRotation.copy( mesh.rotation );
+		currentScale.copy( mesh.scale );
 
 		mesh.position.set( 0, 0, 0 );
 		mesh.rotation.set( 0, 0, 0 );
@@ -67,7 +78,7 @@ THREE.MMDPhysics.prototype = {
 
 		mesh.updateMatrixWorld( true );
 
-		this.initWorld();
+		if ( this.world === null ) this.initWorld();
 		this.initRigidBodies();
 		this.initConstraints();
 
@@ -84,6 +95,10 @@ THREE.MMDPhysics.prototype = {
 		mesh.updateMatrixWorld( true );
 
 		this.reset();
+
+		helper.freeThreeVector3( currentPosition );
+		helper.freeThreeEuler( currentRotation );
+		helper.freeThreeVector3( currentScale );
 
 	},
 
@@ -131,6 +146,14 @@ THREE.MMDPhysics.prototype = {
 
 	update: function ( delta ) {
 
+		this.updateRigidBodies();
+		this.stepSimulation( delta );
+		this.updateBones();
+
+	},
+
+	stepSimulation: function ( delta ) {
+
 		var unitStep = this.unitStep;
 		var stepTime = delta;
 		var maxStepNum = ( ( delta / unitStep ) | 0 ) + 1;
@@ -148,9 +171,7 @@ THREE.MMDPhysics.prototype = {
 
 		}
 
-		this.updateRigidBodies();
 		this.world.stepSimulation( stepTime, maxStepNum, unitStep );
-		this.updateBones();
 
 	},
 
@@ -368,34 +389,35 @@ THREE.MMDPhysics.ResourceHelper.prototype = {
 
 	},
 
+	setOriginFromThreeVector3: function ( t, v ) {
+
+		t.getOrigin().setValue( v.x, v.y, v.z );
+
+	},
+
 	setBasisFromArray3: function ( t, a ) {
 
 		var thQ = this.allocThreeQuaternion();
 		var thE = this.allocThreeEuler();
 		thE.set( a[ 0 ], a[ 1 ], a[ 2 ] );
-		this.setBasisFromArray4( t, thQ.setFromEuler( thE ).toArray() );
+		this.setBasisFromThreeQuaternion( t, thQ.setFromEuler( thE ) );
 
 		this.freeThreeEuler( thE );
 		this.freeThreeQuaternion( thQ );
 
 	},
 
-	setBasisFromArray4: function ( t, a ) {
-
-		var q = this.array4ToQuaternion( a );
-		this.setBasis( t, q );
-		this.freeQuaternion( q );
-
-	},
-
-	array4ToQuaternion: function( a ) {
+	setBasisFromThreeQuaternion: function ( t, a ) {
 
 		var q = this.allocQuaternion();
-		q.setX( a[ 0 ] );
-		q.setY( a[ 1 ] );
-		q.setZ( a[ 2 ] );
-		q.setW( a[ 3 ] );
-		return q;
+
+		q.setX( a.x );
+		q.setY( a.y );
+		q.setZ( a.z );
+		q.setW( a.w );
+		this.setBasis( t, q );
+
+		this.freeQuaternion( q );
 
 	},
 
@@ -634,7 +656,7 @@ THREE.MMDPhysics.ResourceHelper.prototype = {
 		q.setW( w );
 		return q;
 
-	},
+	}
 
 };
 
@@ -678,7 +700,7 @@ THREE.MMDPhysics.RigidBody.prototype = {
 
 			}
 
-		};
+		}
 
 		var helper = this.helper;
 		var params = this.params;
@@ -701,9 +723,10 @@ THREE.MMDPhysics.RigidBody.prototype = {
 		helper.setOriginFromArray3( boneOffsetForm, params.position );
 		helper.setBasisFromArray3( boneOffsetForm, params.rotation );
 
+		var vector = helper.allocThreeVector3();
 		var boneForm = helper.allocTransform();
 		helper.setIdentity( boneForm );
-		helper.setOriginFromArray3( boneForm, bone.getWorldPosition().toArray() );
+		helper.setOriginFromThreeVector3( boneForm, bone.getWorldPosition( vector ) );
 
 		var form = helper.multiplyTransforms( boneForm, boneOffsetForm );
 		var state = new Ammo.btDefaultMotionState( form );
@@ -740,6 +763,7 @@ THREE.MMDPhysics.RigidBody.prototype = {
 		helper.freeVector3( localInertia );
 		helper.freeTransform( form );
 		helper.freeTransform( boneForm );
+		helper.freeThreeVector3( vector );
 
 	},
 
@@ -794,16 +818,22 @@ THREE.MMDPhysics.RigidBody.prototype = {
 	getBoneTransform: function () {
 
 		var helper = this.helper;
-		var p = this.bone.getWorldPosition();
-		var q = this.bone.getWorldQuaternion();
+		var p = helper.allocThreeVector3();
+		var q = helper.allocThreeQuaternion();
+		var s = helper.allocThreeVector3();
+
+		this.bone.matrixWorld.decompose( p, q, s );
 
 		var tr = helper.allocTransform();
-		helper.setOriginFromArray3( tr, p.toArray() );
-		helper.setBasisFromArray4( tr, q.toArray() );
+		helper.setOriginFromThreeVector3( tr, p );
+		helper.setBasisFromThreeQuaternion( tr, q );
 
 		var form = helper.multiplyTransforms( tr, this.boneOffsetForm );
 
 		helper.freeTransform( tr );
+		helper.freeThreeVector3( s );
+		helper.freeThreeQuaternion( q );
+		helper.freeThreeVector3( p );
 
 		return form;
 
@@ -858,8 +888,6 @@ THREE.MMDPhysics.RigidBody.prototype = {
 
 	updateBoneRotation: function () {
 
-		this.bone.updateMatrixWorld( true );
-
 		var helper = this.helper;
 
 		var tr = this.getWorldTransformForBone();
@@ -871,7 +899,7 @@ THREE.MMDPhysics.RigidBody.prototype = {
 
 		thQ.set( q.x(), q.y(), q.z(), q.w() );
 		thQ2.setFromRotationMatrix( this.bone.matrixWorld );
-		thQ2.conjugate()
+		thQ2.conjugate();
 		thQ2.multiply( thQ );
 
 		//this.bone.quaternion.multiply( thQ2 );
@@ -1037,17 +1065,18 @@ THREE.MMDPhysics.Constraint.prototype = {
 };
 
 
-THREE.MMDPhysicsHelper = function ( mesh ) {
+THREE.MMDPhysicsHelper = function ( mesh, physics ) {
 
-	if ( mesh.physics === undefined || mesh.geometry.rigidBodies === undefined ) {
+	if ( mesh.geometry.rigidBodies === undefined ) {
 
-		throw 'THREE.MMDPhysicsHelper requires physics in mesh and rigidBodies in mesh.geometry.';
+		throw new Error( 'THREE.MMDPhysicsHelper requires rigidBodies in mesh.geometry.' );
 
 	}
 
 	THREE.Object3D.call( this );
 
 	this.root = mesh;
+	this.physics = physics;
 
 	this.matrix = mesh.matrixWorld;
 	this.matrixAutoUpdate = false;
@@ -1108,7 +1137,7 @@ THREE.MMDPhysicsHelper.prototype._init = function () {
 				return new THREE.SphereBufferGeometry( param.width, 16, 8 );
 
 			case 1:
-				return new THREE.BoxBufferGeometry( param.width * 2, param.height * 2, param.depth * 2, 8, 8, 8);
+				return new THREE.BoxBufferGeometry( param.width * 2, param.height * 2, param.depth * 2, 8, 8, 8 );
 
 			case 2:
 				return new createCapsuleGeometry( param.width, param.height, 16, 8 );
@@ -1153,7 +1182,7 @@ THREE.MMDPhysicsHelper.prototype.update = function () {
 
 	var mesh = this.root;
 	var rigidBodies = mesh.geometry.rigidBodies;
-	var bodies = mesh.physics.bodies;
+	var bodies = this.physics.bodies;
 
 	var matrixWorldInv = new THREE.Matrix4().getInverse( mesh.matrixWorld );
 	var vector = new THREE.Vector3();

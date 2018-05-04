@@ -118,7 +118,7 @@
 
 				return geometry;
 
-			};
+			}
 
 			function createBones ( sizing ) {
 
@@ -140,7 +140,7 @@
 
 				return bones;
 
-			};
+			}
 
 			function createMesh ( geometry, bones ) {
 
@@ -149,7 +149,7 @@
 					color: 0x156289,
 					emissive: 0x072534,
 					side: THREE.DoubleSide,
-					shading: THREE.FlatShading
+					flatShading: true
 				} );
 
 				var mesh = new THREE.SkinnedMesh( geometry,	material );
@@ -165,7 +165,7 @@
 
 				return mesh;
 
-			};
+			}
 
 			function setupDatGui () {
 
@@ -234,16 +234,13 @@
 				mesh.scale.multiplyScalar( 1 );
 				scene.add( mesh );
 
-			};
+			}
 
 			function render () {
 
 				requestAnimationFrame( render );
 
 				var time = Date.now() * 0.001;
-
-				var bone = mesh;
-
 
 				//Wiggle the bones
 				if ( state.animateBones ) {
@@ -256,11 +253,9 @@
 
 				}
 
-				skeletonHelper.update();
-
 				renderer.render( scene, camera );
 
-			};
+			}
 
 			initScene();
 			render();
